@@ -24,12 +24,13 @@ SHEET_IDS = {
     'sheet2': '1dqYlI9l6gKomfApHyWiWTTZK8Fb7K_yM7JHuw6dT6bM',
 }
 
+
 def get_sheet_data(sheet_id, range_name):
     sheet = service.spreadsheets()
     result = sheet.values().get(spreadsheetId=sheet_id, range=range_name).execute()
     return result.get('values', [])
 
-# ✅ ROUTE ADA SETELAH APP TERDEFINISI
+
 @app.route('/search', methods=['GET'])
 def search_data():
     city_from = request.args.get('city_from', '').lower()
@@ -48,19 +49,24 @@ def search_data():
 
     for sheet_id in SHEET_IDS.values():
         data = get_sheet_data(sheet_id, 'Sheet2!A:Z')
+        if not data or len(data) < 2:
+            continue
 
-        header = data[0]
         for row in data[1:]:
             if len(row) < 7:
                 continue
-            bulan, stt, berat, revenue = row[1], row[2], row[3], row[6]
+
+            bulan, stt_raw, berat_raw, revenue_raw = row[1], row[2], row[3], row[6]
             from_data = row[4].lower()
             to_data = row[5].lower()
 
             if city_from in from_data and city_to in to_data:
-                stt = int(stt.replace(",", "").strip())
-                berat = int(berat.replace(",", "").strip())
-                revenue = int(revenue.replace(",", "").strip())
+                try:
+                    stt = int(stt_raw.replace(",", "").strip())
+                    berat = int(berat_raw.replace(",", "").strip())
+                    revenue = int(revenue_raw.replace(",", "").strip())
+                except ValueError:
+                    continue  # Skip baris jika data tidak valid
 
                 if bulan not in summary["detail_bulan"]:
                     summary["detail_bulan"][bulan] = {
@@ -73,13 +79,14 @@ def search_data():
                 summary["detail_bulan"][bulan]["stt"] += stt
                 summary["detail_bulan"][bulan]["berat"] += berat
                 summary["detail_bulan"][bulan]["revenue"] += revenue
+
                 summary["total_stt"] += stt
                 summary["total_berat"] += berat
                 summary["total_revenue"] += revenue
 
     summary["total_bulan"] = len(summary["bulan"])
 
-    # Format angka dengan koma
+    # Format angka dengan titik sebagai pemisah ribuan
     def fmt(num): return f"{num:,}".replace(",", ".")
 
     for bulan in summary["detail_bulan"]:
@@ -91,6 +98,7 @@ def search_data():
     summary["total_revenue"] = fmt(summary["total_revenue"])
 
     return jsonify(summary)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
