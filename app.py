@@ -1,13 +1,13 @@
 import os
 import json
-from flask import Flask, jsonify, request
+from flask import Flask, request, jsonify
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from collections import defaultdict
 
 app = Flask(__name__)
 
-# Load credentials dari ENV
+# Load credential dari ENV
 credentials_json = os.getenv("GOOGLE_CREDENTIALS")
 credentials_info = json.loads(credentials_json)
 credentials = Credentials.from_service_account_info(
@@ -16,32 +16,44 @@ credentials = Credentials.from_service_account_info(
 )
 service = build('sheets', 'v4', credentials=credentials)
 
-# Google Sheets
+# ID dari dua Google Sheet
 SHEET_IDS = {
-    'sheet1': '1cpzDf5mI1bm6U5JlfMvxolltI4Abrch2Ed4JQF4RoiA',
-    'sheet2': '1dqYlI9l6gKomfApHyWiWTTZK8Fb7K_yM7JHuw6dT6bM',
+    'revenue': '1cpzDf5mI1bm6U5JlfMvxolltI4Abrch2Ed4JQF4RoiA',
+    'performance': '1dqYlI9l6gKomfApHyWiWTTZK8Fb7K_yM7JHuw6dT6bM',
 }
 
-# Urutan bulan
 BULAN_ORDER = {
     "Januari": 1, "Februari": 2, "Maret": 3, "April": 4, "Mei": 5, "Juni": 6,
     "Juli": 7, "Agustus": 8, "September": 9, "Oktober": 10, "November": 11, "Desember": 12
 }
 
-# Fungsi mengambil data dari sheet
 def get_sheet_data(sheet_id, range_name):
     sheet = service.spreadsheets()
     result = sheet.values().get(spreadsheetId=sheet_id, range=range_name).execute()
     return result.get('values', [])
 
-# Fungsi format angka
-def format_angka(n):
+def format_number(n):
     return f"{n:,}".replace(",", ".")
 
-@app.route('/search', methods=['GET'])
+@app.route("/search", methods=["GET"])
 def search_data():
-    city_from = request.args.get('city_from', '').lower()
-    city_to = request.args.get('city_to', '').lower()
+    city_from = request.args.get("city_from", "").lower()
+    city_to = request.args.get("city_to", "").lower()
+    revenue_flag = "revenue" in request.args
+    performance_flag = "performance" in request.args
+
+    if revenue_flag and city_from and city_to:
+        return handle_revenue(city_from, city_to)
+    elif performance_flag and city_to:
+        return handle_performance(city_to)
+    else:
+        return jsonify({"error": "Parameter tidak lengkap atau salah. Gunakan 'city_from', 'city_to', dan 'revenue' atau 'city_to' dan 'performance'."})
+
+def handle_revenue(city_from, city_to):
+    data = get_sheet_data(SHEET_IDS['revenue'], "Sheet2!A:Z")
+
+    if not data or len(data) < 2:
+        return jsonify({"error": "Tidak ada data ditemukan."})
 
     summary = {
         "deskripsi": f"{city_from.title()} - {city_to.title()}",
@@ -49,78 +61,105 @@ def search_data():
         "total_stt": 0,
         "total_berat": 0,
         "total_revenue": 0,
+        "tahun": [],
         "bulan": [],
         "detail_bulan": {},
-        "total_per_tahun": {}  # ➕ penambahan grup total per tahun
+        "total_per_tahun": {}
     }
 
-    bulan_dict = defaultdict(lambda: {"stt": 0, "berat": 0, "revenue": 0})
-    tahun_dict = defaultdict(lambda: {"stt": 0, "berat": 0, "revenue": 0})
+    result = defaultdict(lambda: {"stt": 0, "berat": 0, "revenue": 0})
 
-    for sheet_id in SHEET_IDS.values():
-        data = get_sheet_data(sheet_id, 'Sheet2!A:Z')
-        if not data or len(data) < 2:
+    for row in data[1:]:
+        if len(row) < 9:
             continue
+        tahun, bulan = row[0].strip(), row[1].strip()
+        from_data, to_data = row[4].lower(), row[5].lower()
 
-        for row in data[1:]:
-            if len(row) < 9:
-                continue
-
-            tahun = row[0].strip()
-            bulan = row[1].strip()
-            from_data = row[4].lower()
-            to_data = row[5].lower()
-
+        if city_from in from_data and city_to in to_data:
             try:
-                stt = int(row[6].replace(",", "").strip())
-                berat = int(row[7].replace(",", "").strip())
-                revenue = int(row[8].replace(",", "").strip())
-            except Exception:
+                stt = int(row[6].replace(",", ""))
+                berat = int(row[7].replace(",", ""))
+                revenue = int(row[8].replace(",", ""))
+            except:
                 continue
 
-            if city_from in from_data and city_to in to_data:
-                key = f"{bulan} {tahun}"  # e.g., "Desember 2024"
-                bulan_dict[key]["stt"] += stt
-                bulan_dict[key]["berat"] += berat
-                bulan_dict[key]["revenue"] += revenue
+            key = f"{bulan} {tahun}"
+            result[key]["stt"] += stt
+            result[key]["berat"] += berat
+            result[key]["revenue"] += revenue
 
-                tahun_dict[tahun]["stt"] += stt
-                tahun_dict[tahun]["berat"] += berat
-                tahun_dict[tahun]["revenue"] += revenue
+            summary["total_stt"] += stt
+            summary["total_berat"] += berat
+            summary["total_revenue"] += revenue
 
-                summary["total_stt"] += stt
-                summary["total_berat"] += berat
-                summary["total_revenue"] += revenue
+            if tahun not in summary["tahun"]:
+                summary["tahun"].append(tahun)
 
-    # Sorting bulan berdasarkan tahun dan bulan
-    sorted_keys = sorted(
-        bulan_dict.keys(),
-        key=lambda x: (int(x.split()[1]), BULAN_ORDER.get(x.split()[0], 13))
-    )
+            if tahun not in summary["total_per_tahun"]:
+                summary["total_per_tahun"][tahun] = {"stt": 0, "berat": 0, "revenue": 0}
+            summary["total_per_tahun"][tahun]["stt"] += stt
+            summary["total_per_tahun"][tahun]["berat"] += berat
+            summary["total_per_tahun"][tahun]["revenue"] += revenue
+
+    # Sort dan susun hasil
+    sorted_keys = sorted(result.keys(), key=lambda x: (int(x.split()[1]), BULAN_ORDER.get(x.split()[0], 13)))
 
     for key in sorted_keys:
-        summary["bulan"].append(key)
-        detail = bulan_dict[key]
-        summary["detail_bulan"][key] = {
-            "stt": format_angka(detail["stt"]),
-            "berat": format_angka(detail["berat"]),
-            "revenue": format_angka(detail["revenue"])
+        bulan, tahun = key.split()
+        if key not in summary["detail_bulan"]:
+            summary["bulan"].append(key)
+            summary["detail_bulan"][key] = {
+                "stt": format_number(result[key]["stt"]),
+                "berat": format_number(result[key]["berat"]),
+                "revenue": format_number(result[key]["revenue"])
+            }
+
+    for t in summary["total_per_tahun"]:
+        summary["total_per_tahun"][t] = {
+            "stt": format_number(summary["total_per_tahun"][t]["stt"]),
+            "berat": format_number(summary["total_per_tahun"][t]["berat"]),
+            "revenue": format_number(summary["total_per_tahun"][t]["revenue"]),
         }
 
-    # Total per tahun
-    for tahun in sorted(tahun_dict.keys()):
-        summary["total_per_tahun"][tahun] = {
-            "stt": format_angka(tahun_dict[tahun]["stt"]),
-            "berat": format_angka(tahun_dict[tahun]["berat"]),
-            "revenue": format_angka(tahun_dict[tahun]["revenue"]),
-        }
-
+    summary["total_stt"] = format_number(summary["total_stt"])
+    summary["total_berat"] = format_number(summary["total_berat"])
+    summary["total_revenue"] = format_number(summary["total_revenue"])
     summary["total_bulan"] = len(summary["bulan"])
-    summary["total_stt"] = format_angka(summary["total_stt"])
-    summary["total_berat"] = format_angka(summary["total_berat"])
-    summary["total_revenue"] = format_angka(summary["total_revenue"])
 
     return jsonify(summary)
 
-if __name__ == '__main__':
+def handle_performance(city_to):
+    data = get_sheet_data(SHEET_IDS['performance'], "Sheet2!A:Z")
+
+    if not data or len(data) < 2:
+        return jsonify({"error": "Data performance tidak ditemukan."})
+
+    hasil = defaultdict(list)
+    for row in data[1:]:
+        if len(row) < 6:
+            continue
+        tahun, bulan = row[0].strip(), row[1].strip()
+        tujuan = row[2].lower()
+        wilayah = row[3].strip()
+        performance = row[4].strip()
+        keterangan = row[5].strip()
+
+        if city_to in tujuan:
+            key = f"{bulan} {tahun}"
+            hasil[key].append({
+                "wilayah": wilayah,
+                "performance": performance,
+                "keterangan": keterangan
+            })
+
+    if not hasil:
+        return jsonify({"message": "Data tidak ditemukan."})
+
+    sorted_keys = sorted(hasil.keys(), key=lambda x: (int(x.split()[1]), BULAN_ORDER.get(x.split()[0], 13)))
+    return jsonify({
+        "kota_tujuan": city_to.title(),
+        "detail_performance": {key: hasil[key] for key in sorted_keys}
+    })
+
+if __name__ == "__main__":
     app.run(debug=True)
