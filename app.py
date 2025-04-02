@@ -47,9 +47,9 @@ def search_data():
         for row in data:
             # Pastikan bahwa kolom yang diambil sesuai dengan kebutuhan (misalnya kolom kota dan bulan)
             if len(row) >= 3:  # Misalkan data ada di kolom 1, 2, 3 untuk kota asal, kota tujuan, dan bulan
-                city_from_data = row[0]  # Asumsi: kolom pertama adalah kota asal
-                city_to_data = row[1]    # Asumsi: kolom kedua adalah kota tujuan
-                month_data = row[2]      # Asumsi: kolom ketiga adalah bulan
+                city_from_data = row[4]  # Asumsi: kolom pertama adalah kota asal
+                city_to_data = row[5]    # Asumsi: kolom kedua adalah kota tujuan
+                month_data = row[1]      # Asumsi: kolom ketiga adalah bulan
 
                 # Cek apakah data cocok dengan query pencarian
                 if city_from in city_from_data and city_to in city_to_data and month in month_data:
