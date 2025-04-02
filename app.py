@@ -7,7 +7,7 @@ app = Flask(__name__)
 
 # Authentication Google Sheets API
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
-SERVICE_ACCOUNT_FILE = 'path_to_your_service_account.json'  # Pastikan file json Service Account berada di lokasi ini
+SERVICE_ACCOUNT_FILE = 'credentials.json'  # Pastikan file json Service Account berada di lokasi ini
 
 credentials = Credentials.from_service_account_file(
     SERVICE_ACCOUNT_FILE, scopes=SCOPES)
