@@ -1,65 +1,75 @@
-import os
-import json
-from flask import Flask, jsonify, request
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-
-app = Flask(__name__)
-
-# Ambil credentials dari environment variable
-credentials_json = os.getenv("GOOGLE_CREDENTIALS")
-if not credentials_json:
-    raise ValueError("Environment variable GOOGLE_CREDENTIALS is missing")
-
-credentials_info = json.loads(credentials_json)
-credentials = Credentials.from_service_account_info(
-    credentials_info,
-    scopes=['https://www.googleapis.com/auth/spreadsheets.readonly']
-)
-
-# Inisialisasi Google Sheets API
-service = build('sheets', 'v4', credentials=credentials)
-
-# ID Google Sheets
-SHEET_IDS = {
-    'sheet1': '1cpzDf5mI1bm6U5JlfMvxolltI4Abrch2Ed4JQF4RoiA',
-    'sheet2': '1dqYlI9l6gKomfApHyWiWTTZK8Fb7K_yM7JHuw6dT6bM',
-}
-
-# Fungsi ambil data dari Google Sheets
-def get_sheet_data(sheet_id, range_name):
-    sheet = service.spreadsheets()
-    result = sheet.values().get(spreadsheetId=sheet_id, range=range_name).execute()
-    return result.get('values', [])
-
-# Endpoint pencarian
 @app.route('/search', methods=['GET'])
 def search_data():
     city_from = request.args.get('city_from', '').lower()
     city_to = request.args.get('city_to', '').lower()
-    month = request.args.get('month', '').lower()
 
-    result = {}
+    summary = {
+        "deskripsi": f"{city_from.title()} - {city_to.title()}",
+        "total_bulan": 0,
+        "total_stt": 0.0,
+        "total_berat": 0.0,
+        "total_revenue": 0.0,
+        "tahun": "",
+        "bulan": [],
+        "detail_bulan": {}
+    }
+
+    bulan_terdeteksi = set()
 
     for sheet_name, sheet_id in SHEET_IDS.items():
         range_name = 'Sheet2!A:Z'
         data = get_sheet_data(sheet_id, range_name)
 
-        for row in data[1:]:  # skip header
-            if len(row) >= 6:
-                row_month = row[1].lower()
-                row_city_from = row[4].lower()
-                row_city_to = row[5].lower()
+        if not data or len(data) < 2:
+            continue
 
-                print("Checking row:", row)
-                print("Compare with:", city_from, city_to, month)
+        for row in data[1:]:
+            if len(row) >= 9:
+                bulan = row[1].strip()
+                tahun = row[0].strip()
+                city_from_data = row[4].lower()
+                city_to_data = row[5].lower()
 
-                if city_from in row_city_from and city_to in row_city_to and month in row_month:
-                    if sheet_name not in result:
-                        result[sheet_name] = []
-                    result[sheet_name].append(row)
+                if city_from in city_from_data and city_to in city_to_data:
+                    try:
+                        stt = float(row[6].replace(',', '').strip() or 0)
+                        berat = float(row[7].replace(',', '').strip() or 0)
+                        revenue = float(row[8].replace(',', '').strip() or 0)
+                    except ValueError:
+                        continue
 
-    return jsonify(result)
+                    if not summary["tahun"]:
+                        summary["tahun"] = tahun
 
-if __name__ == '__main__':
-    app.run(debug=True)
+                    if bulan not in summary["detail_bulan"]:
+                        summary["detail_bulan"][bulan] = {
+                            "stt": 0.0,
+                            "berat": 0.0,
+                            "revenue": 0.0
+                        }
+
+                    summary["detail_bulan"][bulan]["stt"] += stt
+                    summary["detail_bulan"][bulan]["berat"] += berat
+                    summary["detail_bulan"][bulan]["revenue"] += revenue
+
+                    summary["total_stt"] += stt
+                    summary["total_berat"] += berat
+                    summary["total_revenue"] += revenue
+
+                    bulan_terdeteksi.add(bulan)
+
+    summary["bulan"] = sorted(list(bulan_terdeteksi))
+    summary["total_bulan"] = len(bulan_terdeteksi)
+
+    # 🔢 Format jadi angka bulat ribuan (tanpa desimal)
+    summary["total_stt"] = f"{summary['total_stt']:,.0f}"
+    summary["total_berat"] = f"{summary['total_berat']:,.0f}"
+    summary["total_revenue"] = f"{summary['total_revenue']:,.0f}"
+
+    for bulan in summary["detail_bulan"]:
+        detail = summary["detail_bulan"][bulan]
+        detail["stt"] = f"{detail['stt']:,.0f}"
+        detail["berat"] = f"{detail['berat']:,.0f}"
+        detail["revenue"] = f"{detail['revenue']:,.0f}"
+
+    return jsonify(summary)
