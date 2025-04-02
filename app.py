@@ -51,3 +51,7 @@ def search_data():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+print("Checking row:", row)
+print("Compare with:", city_from, city_to, month)
+
