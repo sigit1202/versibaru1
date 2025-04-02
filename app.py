@@ -1,3 +1,35 @@
+import os
+import json
+from flask import Flask, jsonify, request
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+
+# Inisialisasi Flask app
+app = Flask(__name__)
+
+# Ambil credentials dari environment
+credentials_json = os.getenv("GOOGLE_CREDENTIALS")
+credentials_info = json.loads(credentials_json)
+
+credentials = Credentials.from_service_account_info(
+    credentials_info,
+    scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
+)
+
+service = build('sheets', 'v4', credentials=credentials)
+
+# Data ID Google Sheets
+SHEET_IDS = {
+    'sheet1': '1cpzDf5mI1bm6U5JlfMvxolltI4Abrch2Ed4JQF4RoiA',
+    'sheet2': '1dqYlI9l6gKomfApHyWiWTTZK8Fb7K_yM7JHuw6dT6bM',
+}
+
+def get_sheet_data(sheet_id, range_name):
+    sheet = service.spreadsheets()
+    result = sheet.values().get(spreadsheetId=sheet_id, range=range_name).execute()
+    return result.get('values', [])
+
+# ✅ ROUTE ADA SETELAH APP TERDEFINISI
 @app.route('/search', methods=['GET'])
 def search_data():
     city_from = request.args.get('city_from', '').lower()
@@ -6,70 +38,59 @@ def search_data():
     summary = {
         "deskripsi": f"{city_from.title()} - {city_to.title()}",
         "total_bulan": 0,
-        "total_stt": 0.0,
-        "total_berat": 0.0,
-        "total_revenue": 0.0,
-        "tahun": "",
+        "total_stt": 0,
+        "total_berat": 0,
+        "total_revenue": 0,
+        "tahun": "2025",
         "bulan": [],
         "detail_bulan": {}
     }
 
-    bulan_terdeteksi = set()
+    for sheet_id in SHEET_IDS.values():
+        data = get_sheet_data(sheet_id, 'Sheet2!A:Z')
 
-    for sheet_name, sheet_id in SHEET_IDS.items():
-        range_name = 'Sheet2!A:Z'
-        data = get_sheet_data(sheet_id, range_name)
-
-        if not data or len(data) < 2:
-            continue
-
+        header = data[0]
         for row in data[1:]:
-            if len(row) >= 9:
-                bulan = row[1].strip()
-                tahun = row[0].strip()
-                city_from_data = row[4].lower()
-                city_to_data = row[5].lower()
+            if len(row) < 7:
+                continue
+            bulan, stt, berat, revenue = row[1], row[2], row[3], row[6]
+            from_data = row[4].lower()
+            to_data = row[5].lower()
 
-                if city_from in city_from_data and city_to in city_to_data:
-                    try:
-                        stt = float(row[6].replace(',', '').strip() or 0)
-                        berat = float(row[7].replace(',', '').strip() or 0)
-                        revenue = float(row[8].replace(',', '').strip() or 0)
-                    except ValueError:
-                        continue
+            if city_from in from_data and city_to in to_data:
+                stt = int(stt.replace(",", "").strip())
+                berat = int(berat.replace(",", "").strip())
+                revenue = int(revenue.replace(",", "").strip())
 
-                    if not summary["tahun"]:
-                        summary["tahun"] = tahun
+                if bulan not in summary["detail_bulan"]:
+                    summary["detail_bulan"][bulan] = {
+                        "stt": 0,
+                        "berat": 0,
+                        "revenue": 0
+                    }
+                    summary["bulan"].append(bulan)
 
-                    if bulan not in summary["detail_bulan"]:
-                        summary["detail_bulan"][bulan] = {
-                            "stt": 0.0,
-                            "berat": 0.0,
-                            "revenue": 0.0
-                        }
+                summary["detail_bulan"][bulan]["stt"] += stt
+                summary["detail_bulan"][bulan]["berat"] += berat
+                summary["detail_bulan"][bulan]["revenue"] += revenue
+                summary["total_stt"] += stt
+                summary["total_berat"] += berat
+                summary["total_revenue"] += revenue
 
-                    summary["detail_bulan"][bulan]["stt"] += stt
-                    summary["detail_bulan"][bulan]["berat"] += berat
-                    summary["detail_bulan"][bulan]["revenue"] += revenue
+    summary["total_bulan"] = len(summary["bulan"])
 
-                    summary["total_stt"] += stt
-                    summary["total_berat"] += berat
-                    summary["total_revenue"] += revenue
-
-                    bulan_terdeteksi.add(bulan)
-
-    summary["bulan"] = sorted(list(bulan_terdeteksi))
-    summary["total_bulan"] = len(bulan_terdeteksi)
-
-    # 🔢 Format jadi angka bulat ribuan (tanpa desimal)
-    summary["total_stt"] = f"{summary['total_stt']:,.0f}"
-    summary["total_berat"] = f"{summary['total_berat']:,.0f}"
-    summary["total_revenue"] = f"{summary['total_revenue']:,.0f}"
+    # Format angka dengan koma
+    def fmt(num): return f"{num:,}".replace(",", ".")
 
     for bulan in summary["detail_bulan"]:
-        detail = summary["detail_bulan"][bulan]
-        detail["stt"] = f"{detail['stt']:,.0f}"
-        detail["berat"] = f"{detail['berat']:,.0f}"
-        detail["revenue"] = f"{detail['revenue']:,.0f}"
+        for k in summary["detail_bulan"][bulan]:
+            summary["detail_bulan"][bulan][k] = fmt(summary["detail_bulan"][bulan][k])
+
+    summary["total_stt"] = fmt(summary["total_stt"])
+    summary["total_berat"] = fmt(summary["total_berat"])
+    summary["total_revenue"] = fmt(summary["total_revenue"])
 
     return jsonify(summary)
+
+if __name__ == '__main__':
+    app.run(debug=True)
