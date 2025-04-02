@@ -7,13 +7,15 @@ from collections import defaultdict
 
 app = Flask(__name__)
 
-# Load credentials dari ENV
+# Ambil credentials dari environment
 credentials_json = os.getenv("GOOGLE_CREDENTIALS")
 credentials_info = json.loads(credentials_json)
+
 credentials = Credentials.from_service_account_info(
     credentials_info,
     scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
 )
+
 service = build('sheets', 'v4', credentials=credentials)
 
 SHEET_IDS = {
@@ -21,7 +23,7 @@ SHEET_IDS = {
     'sheet2': '1dqYlI9l6gKomfApHyWiWTTZK8Fb7K_yM7JHuw6dT6bM',
 }
 
-# Urutan bulan untuk sorting
+# Urutan bulan
 BULAN_ORDER = {
     "Januari": 1, "Februari": 2, "Maret": 3, "April": 4, "Mei": 5, "Juni": 6,
     "Juli": 7, "Agustus": 8, "September": 9, "Oktober": 10, "November": 11, "Desember": 12
@@ -43,12 +45,11 @@ def search_data():
         "total_stt": 0,
         "total_berat": 0,
         "total_revenue": 0,
-        "tahun": "2025",
+        "tahun": "",  # ← diisi nanti
         "bulan": [],
         "detail_bulan": {}
     }
 
-    # Untuk menyimpan data per bulan
     bulan_dict = defaultdict(lambda: {"stt": 0, "berat": 0, "revenue": 0})
 
     for sheet_id in SHEET_IDS.values():
@@ -81,15 +82,19 @@ def search_data():
                 summary["total_berat"] += berat
                 summary["total_revenue"] += revenue
 
-    # Sort berdasarkan tahun dan bulan
+    # Urutkan berdasarkan tahun dan bulan
     sorted_keys = sorted(
         bulan_dict.keys(),
         key=lambda x: (int(x.split('-')[0]), BULAN_ORDER.get(x.split('-')[1], 13))
     )
 
+    tahun_set = set()
+
     for key in sorted_keys:
         tahun, bulan = key.split('-')
+        tahun_set.add(tahun)
         detail = bulan_dict[key]
+
         summary["bulan"].append(bulan)
         summary["detail_bulan"][bulan] = {
             "stt": f"{detail['stt']:,}".replace(",", "."),
@@ -101,6 +106,7 @@ def search_data():
     summary["total_stt"] = f"{summary['total_stt']:,}".replace(",", ".")
     summary["total_berat"] = f"{summary['total_berat']:,}".replace(",", ".")
     summary["total_revenue"] = f"{summary['total_revenue']:,}".replace(",", ".")
+    summary["tahun"] = ", ".join(sorted(tahun_set))
 
     return jsonify(summary)
 
