@@ -28,9 +28,9 @@ def get_sheet_data(sheet_id, range_name):
 
 @app.route('/search', methods=['GET'])
 def search_data():
-    city_from = request.args.get('city_from').lower()
-    city_to = request.args.get('city_to').lower()
-    month = request.args.get('month').lower()
+    city_from = request.args.get('city_from')
+    city_to = request.args.get('city_to')
+    month = request.args.get('month')
 
     result = {}
 
@@ -38,14 +38,16 @@ def search_data():
         range_name = 'Sheet2!A:Z'
         data = get_sheet_data(sheet_id, range_name)
 
-        for row in data:
+        for row in data[1:]:  # SKIP HEADER
             if len(row) >= 6:
-                city_from_data = row[4].lower().strip()
-                city_to_data = row[5].lower().strip()
-                month_data = row[1].lower().strip()
+                month_data = row[1].lower()
+                city_from_data = row[4].lower()
+                city_to_data = row[5].lower()
 
-                if city_from in city_from_data and city_to in city_to_data and month in month_data:
-                    result.setdefault(sheet_name, []).append(row)
+                if city_from.lower() in city_from_data and city_to.lower() in city_to_data and month.lower() in month_data:
+                    if sheet_name not in result:
+                        result[sheet_name] = []
+                    result[sheet_name].append(row)
 
     return jsonify(result)
 
