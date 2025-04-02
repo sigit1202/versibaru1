@@ -30,34 +30,30 @@ def get_sheet_data(sheet_id, range_name):
 
 @app.route('/search', methods=['GET'])
 def search_data():
-    # Mendapatkan parameter pencarian dari request
-    city_from = request.args.get('city_from')
-    city_to = request.args.get('city_to')
-    month = request.args.get('month')
+    city_from = request.args.get('city_from').lower()
+    city_to = request.args.get('city_to').lower()
+    month = request.args.get('month').lower()
 
     result = {}
 
-    # Mengambil data dari kedua Google Sheets
     for sheet_name, sheet_id in SHEET_IDS.items():
-        # Menetapkan range untuk mengambil data dari sheet2
-        range_name = f'Sheet2!A:Z'  # Mengambil semua kolom dari Sheet2
+        range_name = 'Sheet2!A:Z'
         data = get_sheet_data(sheet_id, range_name)
 
-        # Mencari data yang cocok berdasarkan parameter pencarian
         for row in data:
-            # Pastikan bahwa kolom yang diambil sesuai dengan kebutuhan (misalnya kolom kota dan bulan)
-            if len(row) >= 3:  # Misalkan data ada di kolom 1, 2, 3 untuk kota asal, kota tujuan, dan bulan
-                city_from_data = row[4]  # Asumsi: kolom pertama adalah kota asal
-                city_to_data = row[5]    # Asumsi: kolom kedua adalah kota tujuan
-                month_data = row[1]      # Asumsi: kolom ketiga adalah bulan
+            # Gunakan pengecekan aman (minimal ada 6 kolom agar tidak IndexError)
+            if len(row) >= 6:
+                city_from_data = row[4].lower().strip()
+                city_to_data = row[5].lower().strip()
+                month_data = row[1].lower().strip()
 
-                # Cek apakah data cocok dengan query pencarian
                 if city_from in city_from_data and city_to in city_to_data and month in month_data:
                     if sheet_name not in result:
                         result[sheet_name] = []
                     result[sheet_name].append(row)
 
     return jsonify(result)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
