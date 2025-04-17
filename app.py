@@ -5,6 +5,8 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from collections import defaultdict
 
+app = Flask(__name__)
+
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -22,9 +24,6 @@ def login():
                 return jsonify({"status": "success"})
 
     return jsonify({"status": "failed"}), 401
-
-
-app = Flask(__name__)
 
 # Load credential dari ENV
 credentials_json = os.getenv("GOOGLE_CREDENTIALS")
