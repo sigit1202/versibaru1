@@ -7,21 +7,21 @@ from collections import defaultdict
 
 @app.route('/login', methods=['POST'])
 def login():
-    data = request.get_json()
-    username = data.get("username", "").strip().lower()
-    password = data.get("password", "").strip()
+    data = request.get_json()
+    username = data.get("username", "").strip().lower()
+    password = data.get("password", "").strip()
 
-    # Ambil data dari Google Sheets
-    login_data = get_sheet_data(SHEET_IDS['performance'], 'SheetLogin!A2:B100')  # misalnya sheet login
+    # Ambil data dari Google Sheets
+    login_data = get_sheet_data(SHEET_IDS['performance'], 'SheetLogin!A2:B100')  # misalnya sheet login
 
-    for row in login_data:
-        if len(row) >= 2:
-            sheet_username = row[0].strip().lower()
-            sheet_password = row[1].strip()
-            if username == sheet_username and password == sheet_password:
-                return jsonify({"status": "success"})
+    for row in login_data:
+        if len(row) >= 2:
+            sheet_username = row[0].strip().lower()
+            sheet_password = row[1].strip()
+            if username == sheet_username and password == sheet_password:
+                return jsonify({"status": "success"})
 
-    return jsonify({"status": "failed"}), 401
+    return jsonify({"status": "failed"}), 401
 
 
 app = Flask(__name__)
@@ -120,7 +120,6 @@ def handle_revenue(city_from, city_to):
             summary["total_per_tahun"][tahun]["berat"] += berat
             summary["total_per_tahun"][tahun]["revenue"] += revenue
 
-    # Sort dan susun hasil
     sorted_keys = sorted(result.keys(), key=lambda x: (int(x.split()[1]), BULAN_ORDER.get(x.split()[0], 13)))
 
     for key in sorted_keys:
