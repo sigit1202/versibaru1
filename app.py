@@ -5,6 +5,25 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from collections import defaultdict
 
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    username = data.get("username", "").strip().lower()
+    password = data.get("password", "").strip()
+
+    # Ambil data dari Google Sheets
+    login_data = get_sheet_data(SHEET_IDS['performance'], 'SheetLogin!A2:B100')  # misalnya sheet login
+
+    for row in login_data:
+        if len(row) >= 2:
+            sheet_username = row[0].strip().lower()
+            sheet_password = row[1].strip()
+            if username == sheet_username and password == sheet_password:
+                return jsonify({"status": "success"})
+
+    return jsonify({"status": "failed"}), 401
+
+
 app = Flask(__name__)
 
 # Load credential dari ENV
