@@ -14,7 +14,7 @@ def login():
     password = data.get("password", "").strip()
 
     # Ambil data dari Google Sheets
-    login_data = get_sheet_data(SHEET_IDS['performance'], 'SheetLogin!A2:B100')  # misalnya sheet login
+   login_data = get_sheet_data(SHEET_IDS['login'], 'Sheet1!A2:B100')  # misalnya sheet login
 
     for row in login_data:
         if len(row) >= 2:
@@ -38,6 +38,7 @@ service = build('sheets', 'v4', credentials=credentials)
 SHEET_IDS = {
     'revenue': '1cpzDf5mI1bm6U5JlfMvxolltI4Abrch2Ed4JQF4RoiA',
     'performance': '1dqYlI9l6gKomfApHyWiWTTZK8Fb7K_yM7JHuw6dT6bM',
+    'login': '1n8gJ0DyvBR21eeDhnN6nECJZJYVtsIA-vVaq_ZPeHJA',
 }
 
 BULAN_ORDER = {
