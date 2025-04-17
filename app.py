@@ -44,3 +44,8 @@ def login():
                 return jsonify({"status": "success"})
 
     return jsonify({"status": "failed"}), 401
+
+@app.route("/search", methods=["GET"])
+def search_data():
+    # ... kode pencarian ...
+
