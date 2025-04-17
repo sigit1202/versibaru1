@@ -108,3 +108,89 @@ def handle_performance(city_to):
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+
+def handle_revenue(city_from, city_to):
+    data = get_sheet_data(SHEET_IDS['revenue'], "Sheet2!A:Z")
+
+    if not data or len(data) < 2:
+        return jsonify({"error": "Tidak ada data ditemukan."})
+
+    summary = {
+        "deskripsi": f"{city_from.title()} - {city_to.title()}",
+        "total_bulan": 0,
+        "total_stt": 0,
+        "total_berat": 0,
+        "total_revenue": 0,
+        "tahun": [],
+        "bulan": [],
+        "detail_bulan": {},
+        "total_per_tahun": {}
+    }
+
+    result = defaultdict(lambda: {"stt": 0, "berat": 0, "revenue": 0})
+    BULAN_ORDER = {
+        "Januari": 1, "Februari": 2, "Maret": 3, "April": 4, "Mei": 5, "Juni": 6,
+        "Juli": 7, "Agustus": 8, "September": 9, "Oktober": 10, "November": 11, "Desember": 12
+    }
+
+    for row in data[1:]:
+        if len(row) < 9:
+            continue
+        tahun, bulan = row[0].strip(), row[1].strip()
+        from_data, to_data = row[4].lower(), row[5].lower()
+
+        if city_from in from_data and city_to in to_data:
+            try:
+                stt = int(row[6].replace(",", ""))
+                berat = int(row[7].replace(",", ""))
+                revenue = int(row[8].replace(",", ""))
+            except:
+                continue
+
+            key = f"{bulan} {tahun}"
+            result[key]["stt"] += stt
+            result[key]["berat"] += berat
+            result[key]["revenue"] += revenue
+
+            summary["total_stt"] += stt
+            summary["total_berat"] += berat
+            summary["total_revenue"] += revenue
+
+            if tahun not in summary["tahun"]:
+                summary["tahun"].append(tahun)
+
+            if tahun not in summary["total_per_tahun"]:
+                summary["total_per_tahun"][tahun] = {"stt": 0, "berat": 0, "revenue": 0}
+            summary["total_per_tahun"][tahun]["stt"] += stt
+            summary["total_per_tahun"][tahun]["berat"] += berat
+            summary["total_per_tahun"][tahun]["revenue"] += revenue
+
+    sorted_keys = sorted(result.keys(), key=lambda x: (int(x.split()[1]), BULAN_ORDER.get(x.split()[0], 13)))
+
+    def format_number(n):
+        return f"{n:,}".replace(",", ".")
+
+    for key in sorted_keys:
+        bulan, tahun = key.split()
+        if key not in summary["detail_bulan"]:
+            summary["bulan"].append(key)
+            summary["detail_bulan"][key] = {
+                "stt": format_number(result[key]["stt"]),
+                "berat": format_number(result[key]["berat"]),
+                "revenue": format_number(result[key]["revenue"])
+            }
+
+    for t in summary["total_per_tahun"]:
+        summary["total_per_tahun"][t] = {
+            "stt": format_number(summary["total_per_tahun"][t]["stt"]),
+            "berat": format_number(summary["total_per_tahun"][t]["berat"]),
+            "revenue": format_number(summary["total_per_tahun"][t]["revenue"]),
+        }
+
+    summary["total_stt"] = format_number(summary["total_stt"])
+    summary["total_berat"] = format_number(summary["total_berat"])
+    summary["total_revenue"] = format_number(summary["total_revenue"])
+    summary["total_bulan"] = len(summary["bulan"])
+
+    return jsonify(summary)
