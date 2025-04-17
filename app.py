@@ -47,5 +47,15 @@ def login():
 
 @app.route("/search", methods=["GET"])
 def search_data():
-    # ... kode pencarian ...
+    city_from = request.args.get("city_from", "").lower()
+    city_to = request.args.get("city_to", "").lower()
+    revenue_flag = "revenue" in request.args
+    performance_flag = "performance" in request.args
+
+    if revenue_flag and city_from and city_to:
+        return handle_revenue(city_from, city_to)
+    elif performance_flag and city_to:
+        return handle_performance(city_to)
+    else:
+        return jsonify({"error": "Parameter tidak lengkap atau salah."})
 
